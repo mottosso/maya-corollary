@@ -21,9 +21,12 @@ unload()
 """
 
 import sys
-import xmlrpclib
+import json
 import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMaya as OpenMaya
+
+# Third-party
+import zmq
 
 # Plug-in information:
 kPluginNodeName = "corollary"
@@ -33,6 +36,17 @@ kPluginNodeId = OpenMaya.MTypeId(0xBEFF8)
 class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
     amplitude_attr = OpenMaya.MObject()
     offset_attr = OpenMaya.MObject()
+
+    def __init__(self):
+        super(CorollaryNode, self).__init__()
+
+        context = zmq.Context()
+
+        print("Connecting to server")
+        socket = context.socket(zmq.REQ)
+        socket.connect("tcp://localhost:7070")
+
+        self.socket = socket
 
     def deform(self, data, iterator, matrix, index):
         """Deform each vertex using the geometry iterator"""
@@ -64,12 +78,16 @@ class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
             ])
 
         # send data..
-        proxy = xmlrpclib.ServerProxy("http://127.0.0.1:7070")
-        positions = proxy.compute(positions, {
-            "envelope": envelope.asFloat(),
-            "amplitude": amplitude.asDouble(),
-            "offset": offset.asDouble(),
-        })
+        self.socket.send(json.dumps({
+            "positions": positions,
+            "data":  {
+                "envelope": envelope.asFloat(),
+                "amplitude": amplitude.asDouble(),
+                "offset": offset.asDouble(),
+            }
+        }))
+
+        positions = json.loads(self.socket.recv())
 
         # Convert Python floats to MPointArray
         points = OpenMaya.MPointArray()
