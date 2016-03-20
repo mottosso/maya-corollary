@@ -21,6 +21,7 @@ unload()
 """
 
 import sys
+import xmlrpclib
 import maya.OpenMayaMPx as OpenMayaMPx
 import maya.OpenMaya as OpenMaya
 
@@ -30,15 +31,16 @@ kPluginNodeId = OpenMaya.MTypeId(0xBEFF8)
 
 
 class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
-    inflation_attr = OpenMaya.MObject()
+    amplitude_attr = OpenMaya.MObject()
+    offset_attr = OpenMaya.MObject()
 
     def deform(self, data, iterator, matrix, index):
         """Deform each vertex using the geometry iterator"""
 
         # Values
-        envelope = data.inputValue(
-            OpenMayaMPx.cvar.MPxDeformerNode_envelope).asFloat()
-        inflation = data.inputValue(self.inflation_attr).asDouble()
+        envelope = data.inputValue(OpenMayaMPx.cvar.MPxDeformerNode_envelope)
+        amplitude = data.inputValue(self.amplitude_attr)
+        offset = data.inputValue(self.offset_attr)
 
         # Get normal
         input_attribute = OpenMayaMPx.cvar.MPxDeformerNode_input
@@ -49,41 +51,34 @@ class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
         input_geometry_object = input_handle.outputValue().child(
             input_geometry_attribute).asMesh()
 
-        normals = OpenMaya.MFloatVectorArray()
-        mesh_fn = OpenMaya.MFnMesh(input_geometry_object)
-        mesh_fn.getVertexNormals(True, normals, OpenMaya.MSpace.kTransform)
-
         points = OpenMaya.MPointArray()
+        mesh_fn = OpenMaya.MFnMesh(input_geometry_object)
         mesh_fn.getPoints(points, OpenMaya.MSpace.kTransform)
 
         positions = []
         for index in xrange(points.length()):
-            positions.append([points[index][0],
-                              points[index][1],
-                              points[index][2]])
+            positions.append([
+                points[index][0],
+                points[index][1],
+                points[index][2]
+            ])
 
         # send data..
-        # ...
-        # retrieve data..
+        proxy = xmlrpclib.ServerProxy("http://127.0.0.1:7070")
+        positions = proxy.compute(positions, {
+            "envelope": envelope.asFloat(),
+            "amplitude": amplitude.asDouble(),
+            "offset": offset.asDouble(),
+        })
 
+        # Convert Python floats to MPointArray
         points = OpenMaya.MPointArray()
         for pos in positions:
             points.append(*pos)
 
-        index = 0
         while not iterator.isDone():
-            vertex_index = iterator.index()
-            normal = OpenMaya.MVector(normals[vertex_index])
-            point = points[index] + (
-                normal *
-                inflation *
-                envelope *
-                0.1
-            )
-
-            iterator.setPosition(point)
+            iterator.setPosition(points[iterator.index()])
             iterator.next()
-            index += 1
 
 
 def nodeCreator():
@@ -91,23 +86,32 @@ def nodeCreator():
 
 
 def nodeInitializer():
-    # The following MFnNumericAttribute function set
-    # will allow us to create our attributes.
-    numeric_attribute_fn = OpenMaya.MFnNumericAttribute()
+    amplitude_fn = OpenMaya.MFnNumericAttribute()
+    offset_fn = OpenMaya.MFnNumericAttribute()
 
-    # Define a mesh inflation attribute, responsible for actually
-    # moving the vertices in the direction of their normals.
-    CorollaryNode.inflation_attr = numeric_attribute_fn.create(
-        "meshInflation", "mi", OpenMaya.MFnNumericData.kDouble, 10.0)
-    numeric_attribute_fn.setStorable(True)
-    numeric_attribute_fn.setWritable(True)
-    numeric_attribute_fn.setKeyable(True)
-    numeric_attribute_fn.setReadable(False)
-    CorollaryNode.addAttribute(CorollaryNode.inflation_attr)
+    CorollaryNode.amplitude_attr = amplitude_fn.create(
+        "amplitude", "am", OpenMaya.MFnNumericData.kDouble, 10.0)
+    amplitude_fn.setStorable(True)
+    amplitude_fn.setWritable(True)
+    amplitude_fn.setKeyable(True)
+    amplitude_fn.setReadable(False)
+    CorollaryNode.addAttribute(CorollaryNode.amplitude_attr)
+
+    CorollaryNode.offset_attr = offset_fn.create(
+        "offset", "of", OpenMaya.MFnNumericData.kDouble, 10.0)
+    offset_fn.setStorable(True)
+    offset_fn.setWritable(True)
+    offset_fn.setKeyable(True)
+    offset_fn.setReadable(False)
+    CorollaryNode.addAttribute(CorollaryNode.offset_attr)
 
     # If any of the inputs change, the output mesh will be recomputed.
     CorollaryNode.attributeAffects(
-        CorollaryNode.inflation_attr,
+        CorollaryNode.amplitude_attr,
+        OpenMayaMPx.cvar.MPxDeformerNode_outputGeom)
+
+    CorollaryNode.attributeAffects(
+        CorollaryNode.offset_attr,
         OpenMayaMPx.cvar.MPxDeformerNode_outputGeom)
 
 
