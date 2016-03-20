@@ -4,7 +4,9 @@ from SimpleXMLRPCServer import SimpleXMLRPCServer
 
 def compute(positions, data):
     for pos in positions:
-        pos[1] += math.sin(pos[0] * data["amplitude"] + data["offset"])
+        value = math.sin(pos[0] * data["amplitude"] + data["offset"])
+        value *= data["envelope"]
+        pos[1] += value  # modify Y-coordinate
     return positions
 
 
