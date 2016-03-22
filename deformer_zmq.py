@@ -13,7 +13,8 @@ signal.signal(signal.SIGINT, signal.SIG_DFL)
 
 def compute(positions, data):
     for pos in positions:
-        value = math.sin(pos[0] * data["amplitude"] + data["offset"])
+        value = math.sin(pos[0] * data["frequency"] + data["offset"])
+        value *= data["amplitude"]
         value *= data["envelope"]
         pos[1] += value  # modify Y-coordinate
     return positions
@@ -23,6 +24,7 @@ print("Listening at tcp://localhost:7070..")
 while True:
     #  Wait for next request from client
     data = json.loads(socket.recv())
+    print json.dumps(data, indent=4)
 
     #  Send reply back to client
     socket.send(json.dumps(compute(**data)))

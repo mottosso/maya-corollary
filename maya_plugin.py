@@ -3,7 +3,8 @@
 import maya.cmds as cmds
 
 def load():
-    cmds.loadPlugin("mayaCorollaryPlugin.py")
+    fname = r"maya_plugin.py"
+    cmds.loadPlugin(fname)
 
 def unload():
     existing = cmds.ls(type="corollary")
@@ -11,12 +12,13 @@ def unload():
     cmds.flushUndo()
     cmds.unloadPlugin("mayaCorollaryPlugin")
 
-load()
+def reload(node):
+    unload()
+    load()
+    cmds.select(node)
+    cmds.deformer(type="corollary")
 
-cmds.polySphere()
-cmds.deformer(type="corollary")
-
-unload()
+reload("pSphere1")
 
 """
 
@@ -36,6 +38,7 @@ kPluginNodeId = OpenMaya.MTypeId(0xBEFF8)
 class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
     amplitude_attr = OpenMaya.MObject()
     offset_attr = OpenMaya.MObject()
+    frequency_attr = OpenMaya.MObject()
 
     def __init__(self):
         super(CorollaryNode, self).__init__()
@@ -54,6 +57,7 @@ class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
         # Values
         envelope = data.inputValue(OpenMayaMPx.cvar.MPxDeformerNode_envelope)
         amplitude = data.inputValue(self.amplitude_attr)
+        frequency = data.inputValue(self.frequency_attr)
         offset = data.inputValue(self.offset_attr)
 
         # Get normal
@@ -83,6 +87,7 @@ class CorollaryNode(OpenMayaMPx.MPxDeformerNode):
             "data":  {
                 "envelope": envelope.asFloat(),
                 "amplitude": amplitude.asDouble(),
+                "frequency": frequency.asDouble(),
                 "offset": offset.asDouble(),
             }
         }))
@@ -105,10 +110,11 @@ def nodeCreator():
 
 def nodeInitializer():
     amplitude_fn = OpenMaya.MFnNumericAttribute()
+    frequency_fn = OpenMaya.MFnNumericAttribute()
     offset_fn = OpenMaya.MFnNumericAttribute()
 
     CorollaryNode.amplitude_attr = amplitude_fn.create(
-        "amplitude", "am", OpenMaya.MFnNumericData.kDouble, 10.0)
+        "amplitude", "am", OpenMaya.MFnNumericData.kDouble, 1.0)
     amplitude_fn.setStorable(True)
     amplitude_fn.setWritable(True)
     amplitude_fn.setKeyable(True)
@@ -116,12 +122,20 @@ def nodeInitializer():
     CorollaryNode.addAttribute(CorollaryNode.amplitude_attr)
 
     CorollaryNode.offset_attr = offset_fn.create(
-        "offset", "of", OpenMaya.MFnNumericData.kDouble, 10.0)
+        "offset", "of", OpenMaya.MFnNumericData.kDouble, 0.0)
     offset_fn.setStorable(True)
     offset_fn.setWritable(True)
     offset_fn.setKeyable(True)
     offset_fn.setReadable(False)
     CorollaryNode.addAttribute(CorollaryNode.offset_attr)
+
+    CorollaryNode.frequency_attr = frequency_fn.create(
+        "frequency", "fr", OpenMaya.MFnNumericData.kDouble, 5.0)
+    frequency_fn.setStorable(True)
+    frequency_fn.setWritable(True)
+    frequency_fn.setKeyable(True)
+    frequency_fn.setReadable(False)
+    CorollaryNode.addAttribute(CorollaryNode.frequency_attr)
 
     # If any of the inputs change, the output mesh will be recomputed.
     CorollaryNode.attributeAffects(
@@ -130,6 +144,10 @@ def nodeInitializer():
 
     CorollaryNode.attributeAffects(
         CorollaryNode.offset_attr,
+        OpenMayaMPx.cvar.MPxDeformerNode_outputGeom)
+
+    CorollaryNode.attributeAffects(
+        CorollaryNode.frequency_attr,
         OpenMayaMPx.cvar.MPxDeformerNode_outputGeom)
 
 
